@@ -505,18 +505,27 @@ function extractCounty(addressComponents){
   return match ? match.long_name : null;
 }
 
+let lastCheckedLat = null;
+let lastCheckedLng = null;
+
 function captureLeadFromCheck(){
   currentLeadId = 'lead_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-  sendLead({ leadId: currentLeadId, address: lastCheckedAddress, inServiceArea: isInServiceArea });
+  sendLead({ leadId: currentLeadId, address: lastCheckedAddress, inServiceArea: isInServiceArea, lat: lastCheckedLat, lng: lastCheckedLng });
 }
 
-function handlePlaceResult(formattedAddress, addressComponents){
+function handlePlaceResult(formattedAddress, addressComponents, location){
   lastCheckedAddress = formattedAddress;
   const county = extractCounty(addressComponents);
   isInServiceArea = county ? SERVICE_COUNTIES.includes(county) : false;
+  if(location){
+    lastCheckedLat = typeof location.lat === 'function' ? location.lat() : location.lat;
+    lastCheckedLng = typeof location.lng === 'function' ? location.lng() : location.lng;
+  }
   showResult(isInServiceArea);
   captureLeadFromCheck();
 }
+
+let pendingPlace = null;
 
 // Runs once the Google Maps script finishes loading (real-API path only)
 function initAutocomplete(){
@@ -524,16 +533,19 @@ function initAutocomplete(){
   autocomplete = new google.maps.places.Autocomplete(input, {
     types: ['address'],
     componentRestrictions: { country: 'us' },
-    fields: ['address_components', 'formatted_address']
+    fields: ['address_components', 'formatted_address', 'geometry']
   });
   autocomplete.addListener('place_changed', () => {
     const place = autocomplete.getPlace();
     if(!place.address_components){
       // Typed text but didn't pick a suggestion from the dropdown — the Check
       // button's geocoder fallback below handles this case instead.
+      pendingPlace = null;
       return;
     }
-    handlePlaceResult(place.formatted_address, place.address_components);
+    // Just remember what was picked — showing the result and capturing the
+    // lead only happens when Check is actually pressed, below.
+    pendingPlace = place;
   });
 }
 
@@ -549,8 +561,14 @@ function runCheck(){
   if(!val) return;
 
   if(usingRealGoogleApi()){
-    // Manual "Check" click — geocode whatever was typed, in case the person
-    // didn't select a suggestion from the autocomplete dropdown.
+    // If the person picked a suggestion from the dropdown and hasn't typed
+    // anything since, use that directly — no need to re-geocode it.
+    if(pendingPlace && pendingPlace.formatted_address === val){
+      handlePlaceResult(pendingPlace.formatted_address, pendingPlace.address_components, pendingPlace.geometry && pendingPlace.geometry.location);
+      return;
+    }
+    // Otherwise geocode whatever was typed (didn't pick a suggestion, or
+    // edited the field after picking one).
     if(typeof google === 'undefined'){
       alert('Still loading — try again in a second.');
       return;
@@ -558,7 +576,7 @@ function runCheck(){
     const geocoder = new google.maps.Geocoder();
     geocoder.geocode({ address: val, componentRestrictions: { country: 'US' } }, (results, status) => {
       if(status === 'OK' && results[0]){
-        handlePlaceResult(results[0].formatted_address, results[0].address_components);
+        handlePlaceResult(results[0].formatted_address, results[0].address_components, results[0].geometry && results[0].geometry.location);
       } else {
         alert("Couldn't find that address — check it and try again.");
       }
