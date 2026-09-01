@@ -528,8 +528,6 @@ function handlePlaceResult(formattedAddress, addressComponents, location){
   captureLeadFromCheck();
 }
 
-let pendingPlace = null;
-
 // Runs once the Google Maps script finishes loading (real-API path only)
 function initAutocomplete(){
   const input = document.getElementById('addressInput');
@@ -543,12 +541,9 @@ function initAutocomplete(){
     if(!place.address_components){
       // Typed text but didn't pick a suggestion from the dropdown — the Check
       // button's geocoder fallback below handles this case instead.
-      pendingPlace = null;
       return;
     }
-    // Just remember what was picked — showing the result and capturing the
-    // lead only happens when Check is actually pressed, below.
-    pendingPlace = place;
+    handlePlaceResult(place.formatted_address, place.address_components, place.geometry && place.geometry.location);
   });
 }
 
@@ -564,14 +559,9 @@ function runCheck(){
   if(!val) return;
 
   if(usingRealGoogleApi()){
-    // If the person picked a suggestion from the dropdown and hasn't typed
-    // anything since, use that directly — no need to re-geocode it.
-    if(pendingPlace && pendingPlace.formatted_address === val){
-      handlePlaceResult(pendingPlace.formatted_address, pendingPlace.address_components, pendingPlace.geometry && pendingPlace.geometry.location);
-      return;
-    }
-    // Otherwise geocode whatever was typed (didn't pick a suggestion, or
-    // edited the field after picking one).
+    // Manual "Check" click — geocode whatever was typed. Selecting a
+    // suggestion from the dropdown is handled separately in initAutocomplete
+    // and doesn't need this button at all.
     if(typeof google === 'undefined'){
       alert('Still loading — try again in a second.');
       return;
