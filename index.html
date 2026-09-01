@@ -522,6 +522,9 @@ function handlePlaceResult(formattedAddress, addressComponents, location){
     lastCheckedLng = typeof location.lng === 'function' ? location.lng() : location.lng;
   }
   showResult(isInServiceArea);
+  // Captured for the map (real geographic signal, even without contact
+  // info) — but this alone doesn't count as a "lead" until name+phone are
+  // actually submitted below. The app's Leads list filters these out.
   captureLeadFromCheck();
 }
 
@@ -603,9 +606,6 @@ function showResult(inArea){
 }
 
 document.getElementById('checkBtn').addEventListener('click', runCheck);
-document.getElementById('addressInput').addEventListener('keydown', (e)=>{
-  if(e.key === 'Enter') runCheck();
-});
 
 async function sendLead(payload){
   const fullPayload = { action: 'submitLead', ...payload };
@@ -638,6 +638,8 @@ async function submitLead(){
     name, phone,
     address: lastCheckedAddress,
     inServiceArea: isInServiceArea,
+    lat: lastCheckedLat,
+    lng: lastCheckedLng,
     tireWidth: document.getElementById('tireWidth')?.value || '',
     tireAspect: document.getElementById('tireAspect')?.value || '',
     tireRim: document.getElementById('tireRim')?.value || '',
